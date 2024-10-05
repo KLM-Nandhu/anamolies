@@ -3,7 +3,6 @@ import pandas as pd
 import openai
 from io import StringIO
 import time
-import random
 
 # Configuration
 MAX_TOKENS = 150
@@ -71,17 +70,6 @@ def get_gpt4o_mini_response(context, question):
         st.error(f"An unexpected error occurred: {str(e)}")
         return None
 
-def generate_question_suggestions(df):
-    columns = df.columns.tolist()
-    suggestions = [
-        f"What is the average {random.choice(columns)}?",
-        f"How many unique values are there in the {random.choice(columns)} column?",
-        f"What is the relationship between {random.choice(columns)} and {random.choice(columns)}?",
-        f"What is the most common value in the {random.choice(columns)} column?",
-        f"How has the {random.choice(columns)} changed over time?"
-    ]
-    return suggestions
-
 def main():
     st.title("Multi-CSV Q&A System with GPT-4o-mini")
     uploaded_files = st.file_uploader("Choose CSV files", type="csv", accept_multiple_files=True)
@@ -94,12 +82,8 @@ def main():
                 st.write(df.head())
                 st.write(f"Total rows in combined dataset: {len(df)}")
                 
-                # Generate and display question suggestions
-                suggestions = generate_question_suggestions(df)
-                selected_question = st.selectbox("Suggested questions:", [""] + suggestions)
-                
-                # Allow user to input their own question or use a suggestion
-                user_question = st.text_input("Ask a question about the data:", value=selected_question)
+                # Allow user to input their question
+                user_question = st.text_input("Ask a question about the data:")
                 
                 if user_question:
                     context = get_relevant_data(df, user_question, MAX_CONTEXT_TOKENS)
