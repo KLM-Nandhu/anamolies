@@ -5,8 +5,8 @@ import io
 
 # Configuration
 MAX_TOKENS = 150
-MAX_CONTEXT_TOKENS = 3000  # Limit for context sent to API
-SAMPLE_ROWS = 100  # Reduced number of sample rows
+MAX_CONTEXT_TOKENS = 3000
+SAMPLE_ROWS = 100
 
 # Set up OpenAI client
 client = OpenAI(api_key=st.secrets["openai_api_key"])
@@ -29,10 +29,10 @@ def truncate_context(context, max_tokens):
         return " ".join(tokens[:max_tokens]) + "..."
     return context
 
-def get_gpt_response(context, question):
+def get_gpt_response(context, question, model="4o-mini"):
     try:
         response = client.chat.completions.create(
-            model="4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that answers questions based on the given CSV data. Provide concise and accurate answers."},
                 {"role": "user", "content": f"Here's a summary and sample of the CSV data:\n{context}\n\nQuestion: {question}\nAnswer:"}
@@ -41,13 +41,17 @@ def get_gpt_response(context, question):
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-        return None
+        st.warning(f"Error with model {model}: {str(e)}. Trying fallback model.")
+        if model != "gpt-4o-mini":
+            return get_gpt_response(context, question, "gpt-3.5-turbo")
+        else:
+            st.error("Both primary and fallback models failed.")
+            return None
 
 def main():
     st.set_page_config(page_title="CSV Q&A System", page_icon="📊", layout="wide")
     
-    st.title("CSV Q&A System with GPT")
+    st.title("CSV Q&A System with 4o-mini Model")
     st.write("Upload your CSV file, preview the data, and ask questions!")
 
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
