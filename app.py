@@ -46,7 +46,7 @@ def process_question(question, data):
     
     # Generate a detailed and efficient prompt for GPT-4
     prompt = f"""
-    You are analyzing a large CSV dataset with the following summary:
+    You are analyzing a CSV dataset with the following summary:
     - Total Rows: {summary['Total Rows']}
     - Total Columns: {summary['Total Columns']}
     
@@ -85,12 +85,11 @@ def main():
         # Read the CSV file
         df = pd.read_csv(uploaded_file)
         
-        st.subheader("CSV Data Preview")
-        st.write(f"Data contains {len(df)} rows and {len(df.columns)} columns.")
+        st.subheader(f"CSV Data Preview: {len(df)} rows and {len(df.columns)} columns.")
         
-        # Optional: Display the first few rows if needed (not the entire dataset)
-        st.write("Showing the first 10 rows for reference:")
-        st.dataframe(df.head(10))  # Show first 10 rows for preview
+        # Show the entire dataframe with scrollable content
+        st.write("Scroll through the full dataset below:")
+        st.dataframe(df)  # Display the entire dataframe in a scrollable format
         
         # Let user input their question dynamically
         st.subheader("Ask a Question About the Data")
