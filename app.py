@@ -29,8 +29,9 @@ def truncate_context(context, max_tokens):
         return " ".join(tokens[:max_tokens]) + "..."
     return context
 
-def get_gpt_response(context, question, model="4o-mini"):
+def get_gpt_response(context, question, model="4o-mini"):  # Keeping the model as 4o-mini
     try:
+        # Attempting to use the 4o-mini model
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -41,12 +42,9 @@ def get_gpt_response(context, question, model="4o-mini"):
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        st.warning(f"Error with model {model}: {str(e)}. Trying fallback model.")
-        if model != "gpt-4o-mini":
-            return get_gpt_response(context, question, "gpt-3.5-turbo")
-        else:
-            st.error("Both primary and fallback models failed.")
-            return None
+        # Catch the error and show the specific error message if 4o-mini doesn't work
+        st.error(f"Error with model {model}: {str(e)}")
+        return None
 
 def main():
     st.set_page_config(page_title="CSV Q&A System", page_icon="📊", layout="wide")
