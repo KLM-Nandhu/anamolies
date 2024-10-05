@@ -43,7 +43,7 @@ def get_relevant_data(df, question, max_tokens):
     
     return context
 
-def get_gpt4o-mini_response(context, question):
+def get_gpt-4o-mini_response(context, question):
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
