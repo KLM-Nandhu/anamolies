@@ -103,10 +103,6 @@ def main():
             st.write("Uploaded CSV data:")
             st.dataframe(df)
 
-            # Display column information
-            st.subheader("Column Information")
-            st.write(f"Columns in the CSV: {', '.join(df.columns)}")
-
             # Convert CSV to JSON
             json_data = convert_csv_to_json(df)
 
