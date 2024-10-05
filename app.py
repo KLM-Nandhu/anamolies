@@ -5,7 +5,8 @@ import io
 
 # Configuration
 MAX_TOKENS = 150
-SAMPLE_ROWS = 1000  # Number of rows to sample for context
+MAX_CONTEXT_TOKENS = 3000  # Limit for context sent to API
+SAMPLE_ROWS = 100  # Reduced number of sample rows
 
 # Set up OpenAI client
 client = OpenAI(api_key=st.secrets["openai_api_key"])
@@ -20,15 +21,21 @@ def get_data_summary(df):
     return summary.getvalue()
 
 def get_data_sample(df, n=SAMPLE_ROWS):
-    return df.sample(n=min(n, len(df))).to_string()
+    return df.sample(n=min(n, len(df))).to_string(index=False)
+
+def truncate_context(context, max_tokens):
+    tokens = context.split()
+    if len(tokens) > max_tokens:
+        return " ".join(tokens[:max_tokens]) + "..."
+    return context
 
 def get_gpt_response(context, question):
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  
+            model="4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that answers questions based on the given CSV data. Provide concise and accurate answers."},
-                {"role": "user", "content": f"Here's a summary of the CSV data:\n{context}\n\nQuestion: {question}\nAnswer:"}
+                {"role": "user", "content": f"Here's a summary and sample of the CSV data:\n{context}\n\nQuestion: {question}\nAnswer:"}
             ],
             max_tokens=MAX_TOKENS
         )
@@ -58,6 +65,7 @@ def main():
             data_summary = get_data_summary(df)
             data_sample = get_data_sample(df)
             context = f"Data Summary:\n{data_summary}\n\nData Sample:\n{data_sample}"
+            context = truncate_context(context, MAX_CONTEXT_TOKENS)
             
             st.subheader("Ask a Question")
             question = st.text_input("Enter your question about the data:")
@@ -85,7 +93,7 @@ def main():
             if selected_column:
                 unique_values = df[selected_column].nunique()
                 st.write(f"Number of unique values in {selected_column}: {unique_values}")
-                if unique_values <= 20:  # Only show if there aren't too many unique values
+                if unique_values <= 20:
                     st.write(df[selected_column].value_counts())
                 else:
                     st.write("Too many unique values to display. Here are the top 20:")
