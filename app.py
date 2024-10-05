@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import openai
 import io
+from typing import List, Dict
 
 # Load OpenAI API key from Streamlit secrets
 openai.api_key = st.secrets["openai_api_key"]
@@ -89,6 +90,19 @@ def filter_relevant_rows(alert_type, df):
     else:
         return df  # Return full dataset if no specific filter applies
 
+# Function to sample and summarize data
+def sample_and_summarize_data(data: List[Dict], max_samples: int = 10) -> str:
+    if len(data) <= max_samples:
+        return json.dumps(data, indent=2)
+    
+    sampled_data = data[:max_samples]
+    summary = {
+        "sampled_data": sampled_data,
+        "total_records": len(data),
+        "sampled_records": len(sampled_data)
+    }
+    return json.dumps(summary, indent=2)
+
 # Main Streamlit app
 def main():
     st.set_page_config(page_title="CSV to JSON & Log Analyzer", layout="wide")
@@ -103,7 +117,7 @@ def main():
             # Convert CSV to DataFrame
             df = pd.read_csv(uploaded_file)
             st.write("Uploaded CSV data:")
-            st.dataframe(df)
+            st.dataframe(df.head())
 
             # Convert CSV to JSON
             json_data = convert_csv_to_json(df)
@@ -137,13 +151,17 @@ def main():
                     if filtered_data.empty:
                         st.warning("No relevant data found based on the question category.")
                     else:
+                        # Sample and summarize the filtered data
+                        sampled_data = sample_and_summarize_data(filtered_data.to_dict(orient="records"))
+                        
                         # Process filtered data with GPT-4
                         prompt = f"""
                         Based on the following log data related to {alert_type}:
-                        {json.dumps(filtered_data.to_dict(orient="records"), indent=2)}
+                        {sampled_data}
 
                         Answer the following question: '{question}'
                         Provide a detailed answer with any relevant insights or recommendations.
+                        If the data provided is a sample, mention this in your answer and provide insights based on the available information.
                         """
 
                         with st.spinner("Processing answer..."):
