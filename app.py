@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import json
+import sys
 from openai import OpenAI
 from datetime import datetime, timedelta
 
@@ -40,58 +41,72 @@ def csv_to_json(csv_file):
     return df.to_json(orient='records')
 
 def process_alerts(json_data):
-    data = json.loads(json_data)
+    try:
+        data = json.loads(json_data)
+    except json.JSONDecodeError:
+        st.error("Error: Invalid JSON data. Please check the uploaded file.")
+        return {}
+
     alerts = {alert: [] for alert in ALL_ALERTS}
 
     for event in data:
-        # Audit Logs Alerts
-        if event['RecordType'] == 1 and event['Operation'] == 'Set-Mailbox' and 'ForwardingSmtpAddress' in event.get('Parameters', ''):
-            alerts["Forwarding Email to another account"].append(event)
-        
-        if event['RecordType'] == 8 and event['Operation'] == 'Change User Password' and event['UserID'] != event['ObjectId']:
-            alerts["Suspicious User Password Change"].append(event)
-        
-        if event['RecordType'] == 8 and event['Operation'] in ['Add User', 'Delete User']:
-            alerts["User accounts added or Deleted"].append(event)
-        
-        if event['RecordType'] == 1 and event['Operation'] == 'Set-AdminAuditLogConfig' and 'UnifiedAuditLogIngestionEnabled' in event.get('Parameters', '') and 'False' in event.get('Parameters', ''):
-            alerts["Audit Logs Disabled"].append(event)
-        
-        if event['RecordType'] == 8 and event['Operation'] == 'DisableStrongAuthentication':
-            alerts["MFA disabled"].append(event)
-        
-        if event['RecordType'] in [61, 78, 90, 87, 106, 113]:
-            alerts["Record Type Based alerts"].append(event)
-        
-        if event['RecordType'] == 8 and event['Operation'] == 'Device no longer compliant':
-            alerts["Device No Longer Compliant"].append(event)
-        
-        if event['Operation'] == 'New-InboxRule':
-            alerts["Suspicious Inbox Manipulation Rule"].append(event)
-        
-        if event['RecordType'] in [42, 40, 98]:
-            alerts["Insight and report events"].append(event)
-        
-        if event['RecordType'] == 28 and event.get('LatestDeliveryLocation') == 'Inbox':
-            alerts["EOP Phishing and Malware events"].append(event)
-        
-        if event['RecordType'] == 8 and event['Operation'] == 'Member Added to Group':
-            alerts["Member added to Group"].append(event)
-        
-        if event['RecordType'] == 8 and event['Operation'] == 'Member Added to Role':
-            alerts["Member added to Role"].append(event)
+        try:
+            record_type = event.get('RecordType')
+            operation = event.get('Operation')
+            parameters = event.get('Parameters', '')
 
-        # Sign In Logs Alerts
-        if event['RecordType'] == 15 and event['Operation'] == 'UserLoginFailed':
-            alerts["Unusual amount of login failures"].append(event)
-            alerts["Possible Brute Force Lockout Evasion"].append(event)
-        
-        if event['RecordType'] == 15 and event['Operation'] == 'UserLoggedIn':
-            alerts["Impossible Travel Alerts"].append(event)
-            alerts["Sign ins with Blacklisted IPs"].append(event)
-            alerts["Sign ins with anonymous IPs"].append(event)
-            alerts["Foreign country alerts"].append(event)
-            alerts["Unusual logins"].append(event)
+            # Audit Logs Alerts
+            if record_type == 1 and operation == 'Set-Mailbox' and 'ForwardingSmtpAddress' in parameters:
+                alerts["Forwarding Email to another account"].append(event)
+            
+            if record_type == 8 and operation == 'Change User Password' and event.get('UserID') != event.get('ObjectId'):
+                alerts["Suspicious User Password Change"].append(event)
+            
+            if record_type == 8 and operation in ['Add User', 'Delete User']:
+                alerts["User accounts added or Deleted"].append(event)
+            
+            if record_type == 1 and operation == 'Set-AdminAuditLogConfig' and 'UnifiedAuditLogIngestionEnabled' in parameters and 'False' in parameters:
+                alerts["Audit Logs Disabled"].append(event)
+            
+            if record_type == 8 and operation == 'DisableStrongAuthentication':
+                alerts["MFA disabled"].append(event)
+            
+            if record_type in [61, 78, 90, 87, 106, 113]:
+                alerts["Record Type Based alerts"].append(event)
+            
+            if record_type == 8 and operation == 'Device no longer compliant':
+                alerts["Device No Longer Compliant"].append(event)
+            
+            if operation == 'New-InboxRule':
+                alerts["Suspicious Inbox Manipulation Rule"].append(event)
+            
+            if record_type in [42, 40, 98]:
+                alerts["Insight and report events"].append(event)
+            
+            if record_type == 28 and event.get('LatestDeliveryLocation') == 'Inbox':
+                alerts["EOP Phishing and Malware events"].append(event)
+            
+            if record_type == 8 and operation == 'Member Added to Group':
+                alerts["Member added to Group"].append(event)
+            
+            if record_type == 8 and operation == 'Member Added to Role':
+                alerts["Member added to Role"].append(event)
+
+            # Sign In Logs Alerts
+            if record_type == 15 and operation == 'UserLoginFailed':
+                alerts["Unusual amount of login failures"].append(event)
+                alerts["Possible Brute Force Lockout Evasion"].append(event)
+            
+            if record_type == 15 and operation == 'UserLoggedIn':
+                alerts["Impossible Travel Alerts"].append(event)
+                alerts["Sign ins with Blacklisted IPs"].append(event)
+                alerts["Sign ins with anonymous IPs"].append(event)
+                alerts["Foreign country alerts"].append(event)
+                alerts["Unusual logins"].append(event)
+
+        except Exception as e:
+            st.warning(f"Error processing event: {str(e)}")
+            continue
 
     return alerts
 
@@ -111,40 +126,98 @@ def generate_report(alerts):
         st.error(f"Error generating report: {str(e)}")
         return "Unable to generate report due to an error with the OpenAI API."
 
-def process_question(question, alerts):
-    # Step 1: Determine the relevant alert type
-    alert_types = "\n".join(ALL_ALERTS)
-    prompt_category = f"Given the following question: '{question}', which of these alert types is most relevant?\n\n{alert_types}\n\nRespond with just the name of the most relevant alert type."
-
+def llm_call(prompt, model="gpt-4o-mini"):
     try:
-        response_category = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt_category}]
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}]
         )
-        relevant_alert = response_category.choices[0].message.content.strip()
-
-        # Step 2: Generate answer based on the relevant alert
-        relevant_events = alerts.get(relevant_alert, [])
-        event_count = len(relevant_events)
-        event_sample = json.dumps(relevant_events[:5], indent=2)  # Sample of up to 5 events
-
-        prompt_answer = f"Question: {question}\n\nRelevant Alert Type: {relevant_alert}\nNumber of events: {event_count}\n\nSample events:\n{event_sample}\n\nBased on this information, please provide a concise answer to the question. If the alert type doesn't seem directly relevant, explain why and provide the best possible answer."
-
-        response_answer = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt_answer}]
-        )
-        answer = response_answer.choices[0].message.content.strip()
-
-        return f"Relevant Alert Type: {relevant_alert}\n\nAnswer: {answer}"
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        st.error(f"Error processing question: {str(e)}")
-        return "Unable to process the question due to an error with the OpenAI API."
+        st.error(f"Error in LLM call: {str(e)}")
+        return None
+
+def determine_relevant_alert_types(question):
+    prompt = f"""Given the following question: '{question}', which of these alert types are most relevant? List up to 3 most relevant types in order of relevance.
+
+Alert types:
+{', '.join(ALL_ALERTS)}
+
+Respond with just the names of the relevant alert types, separated by commas."""
+
+    return llm_call(prompt)
+
+def extract_relevant_info(question, alert_type, events):
+    event_sample = json.dumps(events[:5], indent=2)  # Sample of up to 5 events
+    prompt = f"""Question: {question}
+Alert Type: {alert_type}
+Number of events: {len(events)}
+
+Sample events:
+{event_sample}
+
+Based on this information, extract and summarize the key details that are relevant to answering the question. Focus on the most important information."""
+
+    return llm_call(prompt)
+
+def generate_initial_answer(question, alert_types, relevant_info):
+    prompt = f"""Question: {question}
+
+Relevant Alert Types: {alert_types}
+
+Relevant Information:
+{relevant_info}
+
+Based on this information, provide a comprehensive answer to the question. If the alert types don't seem directly relevant, explain why and provide the best possible answer based on the available information."""
+
+    return llm_call(prompt)
+
+def refine_answer(question, initial_answer):
+    prompt = f"""Original Question: {question}
+
+Initial Answer:
+{initial_answer}
+
+Please refine and improve this answer. Ensure it's clear, concise, and directly addresses the question. Add any additional insights or context that might be helpful. If there are any potential security implications or recommendations, include them."""
+
+    return llm_call(prompt)
+
+def process_question(question, alerts):
+    # Step 1: Determine relevant alert types
+    relevant_alert_types = determine_relevant_alert_types(question)
+    if not relevant_alert_types:
+        return "Unable to process the question due to an error."
+
+    # Step 2: Extract relevant information for each alert type
+    relevant_info = ""
+    for alert_type in relevant_alert_types.split(', '):
+        events = alerts.get(alert_type.strip(), [])
+        info = extract_relevant_info(question, alert_type, events)
+        if info:
+            relevant_info += f"\n\nAlert Type: {alert_type}\n{info}"
+
+    # Step 3: Generate initial answer
+    initial_answer = generate_initial_answer(question, relevant_alert_types, relevant_info)
+    if not initial_answer:
+        return "Unable to generate an answer due to an error."
+
+    # Step 4: Refine the answer
+    final_answer = refine_answer(question, initial_answer)
+    if not final_answer:
+        return initial_answer  # Fallback to initial answer if refinement fails
+
+    return f"Relevant Alert Types: {relevant_alert_types}\n\nAnswer: {final_answer}"
 
 def main():
     st.set_page_config(page_title="Comprehensive Log Analysis", layout="wide")
 
     st.title("🔍 Comprehensive Log Analysis System")
+
+    # Add debugging information
+    st.sidebar.write("Debug Information:")
+    st.sidebar.write(f"Streamlit version: {st.__version__}")
+    st.sidebar.write(f"Python version: {sys.version}")
+    st.sidebar.write(f"OpenAI library version: {openai.__version__}")
 
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
     if uploaded_file is not None:
