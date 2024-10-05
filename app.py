@@ -1,110 +1,154 @@
 import streamlit as st
 import pandas as pd
-import openai
+import json
+import os
+from openai import OpenAI
+from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
-# Set up OpenAI API key
-openai.api_key = st.secrets["openai_api_key"]
+# Load environment variables
+load_dotenv()
 
-@st.cache_data
-def load_csv(file):
-    return pd.read_csv(file)
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def process_question_with_gpt(question, context):
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that analyzes questions about CSV data and provides key terms to search for in the data."},
-                {"role": "user", "content": f"Given this context about a CSV file:\n{context}\n\nAnalyze this question and provide key terms to search for in the CSV data: {question}"}
-            ],
-            max_tokens=100
-        )
-        return response.choices[0].message['content'].strip()
-    except Exception as e:
-        st.error(f"An error occurred while processing with GPT: {str(e)}")
-        return None
+# Define alert types
+AUDIT_LOGS_ALERTS = [
+    "Forwarding Email to another account",
+    "Suspicious User Password Change",
+    "User accounts added or Deleted",
+    "Audit Logs Disabled",
+    "MFA disabled",
+    "Record Type Based alerts",
+    "Device No Longer Compliant",
+    "Suspicious Inbox Manipulation Rule",
+    "Insight and report events",
+    "EOP Phishing and Malware events",
+    "Member added to Group",
+    "Member added to Role"
+]
 
-def find_answer_in_csv(df, question, gpt_analysis):
-    key_terms = gpt_analysis.lower().split()
-    
-    for column in df.columns:
-        if any(term in column.lower() for term in key_terms):
-            for value in df[column].astype(str):
-                if any(term in value.lower() for term in key_terms):
-                    result = df[df[column].astype(str).str.lower() == value.lower()]
-                    if not result.empty:
-                        return result.iloc[0].to_dict()
-    
-    return "I couldn't find a relevant answer in the CSV data."
+SIGN_IN_LOGS_ALERTS = [
+    "Unusual amount of login failures",
+    "Possible Brute Force Lockout Evasion",
+    "Impossible Travel Alerts",
+    "Sign ins with Blacklisted IPs",
+    "Sign ins with anonymous IPs",
+    "Foreign country alerts",
+    "Unusual logins"
+]
 
-def format_answer(answer_dict):
-    if isinstance(answer_dict, str):
-        return answer_dict
-    
-    formatted_answer = "Here's the information I found:\n\n"
-    for key, value in answer_dict.items():
-        formatted_answer += f"{key}: {value}\n"
-    return formatted_answer
+ALL_ALERTS = AUDIT_LOGS_ALERTS + SIGN_IN_LOGS_ALERTS
+
+def csv_to_json(csv_file):
+    df = pd.read_csv(csv_file)
+    return df.to_json(orient='records')
+
+def process_alerts(json_data):
+    data = json.loads(json_data)
+    alerts = {alert: [] for alert in ALL_ALERTS}
+
+    for event in data:
+        # Audit Logs Alerts
+        if event['RecordType'] == 1 and event['Operation'] == 'Set-Mailbox' and 'ForwardingSmtpAddress' in event.get('Parameters', ''):
+            alerts["Forwarding Email to another account"].append(event)
+        
+        if event['RecordType'] == 8 and event['Operation'] == 'Change User Password' and event['UserID'] != event['ObjectId']:
+            alerts["Suspicious User Password Change"].append(event)
+        
+        if event['RecordType'] == 8 and event['Operation'] in ['Add User', 'Delete User']:
+            alerts["User accounts added or Deleted"].append(event)
+        
+        if event['RecordType'] == 1 and event['Operation'] == 'Set-AdminAuditLogConfig' and 'UnifiedAuditLogIngestionEnabled' in event.get('Parameters', '') and 'False' in event.get('Parameters', ''):
+            alerts["Audit Logs Disabled"].append(event)
+        
+        if event['RecordType'] == 8 and event['Operation'] == 'DisableStrongAuthentication':
+            alerts["MFA disabled"].append(event)
+        
+        if event['RecordType'] in [61, 78, 90, 87, 106, 113]:
+            alerts["Record Type Based alerts"].append(event)
+        
+        if event['RecordType'] == 8 and event['Operation'] == 'Device no longer compliant':
+            alerts["Device No Longer Compliant"].append(event)
+        
+        if event['Operation'] == 'New-InboxRule':
+            alerts["Suspicious Inbox Manipulation Rule"].append(event)
+        
+        if event['RecordType'] in [42, 40, 98]:
+            alerts["Insight and report events"].append(event)
+        
+        if event['RecordType'] == 28 and event.get('LatestDeliveryLocation') == 'Inbox':
+            alerts["EOP Phishing and Malware events"].append(event)
+        
+        if event['RecordType'] == 8 and event['Operation'] == 'Member Added to Group':
+            alerts["Member added to Group"].append(event)
+        
+        if event['RecordType'] == 8 and event['Operation'] == 'Member Added to Role':
+            alerts["Member added to Role"].append(event)
+
+        # Sign In Logs Alerts
+        if event['RecordType'] == 15 and event['Operation'] == 'UserLoginFailed':
+            alerts["Unusual amount of login failures"].append(event)
+            alerts["Possible Brute Force Lockout Evasion"].append(event)
+        
+        if event['RecordType'] == 15 and event['Operation'] == 'UserLoggedIn':
+            alerts["Impossible Travel Alerts"].append(event)
+            alerts["Sign ins with Blacklisted IPs"].append(event)
+            alerts["Sign ins with anonymous IPs"].append(event)
+            alerts["Foreign country alerts"].append(event)
+            alerts["Unusual logins"].append(event)
+
+    return alerts
+
+def generate_report(alerts):
+    prompt = f"Generate a comprehensive security report based on the following alert data:\n\n"
+    for alert_type, events in alerts.items():
+        prompt += f"{alert_type}: {len(events)} events\n"
+    prompt += "\nProvide a summary of the alerts, including the most critical issues, potential security risks, and recommended actions. Please format the report in Markdown."
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content
 
 def main():
-    st.set_page_config(page_title="CSV Q&A System", page_icon="📊", layout="wide")
-    
-    st.title("CSV Q&A System with OpenAI")
-    st.write("Upload your CSV file, preview the data, and ask questions!")
+    st.set_page_config(page_title="Comprehensive Log Analysis", layout="wide")
+
+    st.title("🔍 Comprehensive Log Analysis System")
 
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-    
     if uploaded_file is not None:
-        try:
-            df = load_csv(uploaded_file)
-            st.success("CSV file loaded successfully!")
-            
-            st.subheader("Data Preview")
-            st.dataframe(df.head())
-            st.info(f"Total rows: {len(df)}, Total columns: {len(df.columns)}")
-            
-            context = f"The CSV file contains the following columns: {', '.join(df.columns)}"
-            
-            st.subheader("Ask a Question")
-            question = st.text_input("Enter your question about the data:")
-            
-            if question:
-                with st.spinner("Processing question and searching data..."):
-                    gpt_analysis = process_question_with_gpt(question, context)
-                    if gpt_analysis:
-                        answer_dict = find_answer_in_csv(df, question, gpt_analysis)
-                        formatted_answer = format_answer(answer_dict)
-                    else:
-                        formatted_answer = "Failed to process the question with GPT."
-                
-                st.subheader("Answer")
-                st.write(formatted_answer)
-                
-                with st.expander("View GPT Analysis"):
-                    st.text(gpt_analysis)
-            
-            # Additional data exploration options
-            st.subheader("Data Exploration")
-            if st.checkbox("Show column information"):
-                st.write(df.dtypes)
-            
-            if st.checkbox("Show summary statistics"):
-                st.write(df.describe())
-            
-            selected_column = st.selectbox("Select a column to view unique values:", df.columns)
-            if selected_column:
-                unique_values = df[selected_column].nunique()
-                st.write(f"Number of unique values in {selected_column}: {unique_values}")
-                if unique_values <= 20:
-                    st.write(df[selected_column].value_counts())
-                else:
-                    st.write("Too many unique values to display. Here are the top 20:")
-                    st.write(df[selected_column].value_counts().head(20))
+        json_data = csv_to_json(uploaded_file)
         
-        except Exception as e:
-            st.error(f"An error occurred while processing the CSV file: {str(e)}")
-    else:
-        st.info("Please upload a CSV file to begin.")
+        st.download_button(
+            label="📥 Download JSON",
+            data=json_data,
+            file_name="converted_data.json",
+            mime="application/json"
+        )
+
+        if st.button("🔍 Analyze Logs"):
+            with st.spinner("Processing..."):
+                alerts = process_alerts(json_data)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("📊 Alert Summary")
+                    for alert_type, events in alerts.items():
+                        st.metric(alert_type, len(events))
+                
+                with col2:
+                    st.subheader("📝 Detailed Report")
+                    report = generate_report(alerts)
+                    st.markdown(report)
+
+                st.subheader("🔍 Detailed Alerts")
+                for alert_type, events in alerts.items():
+                    if events:
+                        with st.expander(f"{alert_type} ({len(events)} events)"):
+                            st.json(events)
 
 if __name__ == "__main__":
     main()
