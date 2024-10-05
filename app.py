@@ -158,13 +158,15 @@ def main():
     st.set_page_config(page_title="Comprehensive Log Analysis", layout="wide")
 
     st.title("CSV Analysis")
+
+    
     
     # Safely try to get OpenAI version
     try:
         openai_version = openai.__version__
     except:
         openai_version = "Version information not available"
-    st.sidebar.write(f"OpenAI library version: {openai_version}")
+
 
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
     if uploaded_file is not None:
@@ -175,12 +177,19 @@ def main():
 
         json_data = df.to_json(orient='records')
         
-        st.download_button(
-            label="Download JSON",
-            data=json_data,
-            file_name="converted_data.json",
-            mime="application/json"
-        )
+        # Create two columns for the buttons
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.download_button(
+                label="Download JSON",
+                data=json_data,
+                file_name="converted_data.json",
+                mime="application/json"
+            )
+        
+        with col2:
+            perform_analysis = st.button("Perform Detailed Log Analysis")
 
         # Question Answering Section
         st.subheader("Ask a Question")
@@ -191,7 +200,7 @@ def main():
                 st.markdown(answer)
 
         # Log Analysis Section
-        if st.button("Perform Detailed Log Analysis"):
+        if perform_analysis:
             with st.spinner("Analyzing logs..."):
                 alerts = process_alerts(json_data)
                 
