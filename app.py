@@ -16,23 +16,36 @@ def create_chat_completion(**kwargs):
         st.error(f"Error in LLM call: {str(e)}")
         return None
 
+def count_sign_in_failures(data):
+    """
+    Counts the number of users who have sign-in failures based on the "Status" field.
+    """
+    failed_sign_ins = data[data["Status"] == "Failure"]
+    unique_failed_users = failed_sign_ins["User"].nunique()
+    
+    return unique_failed_users
+
 def process_question(question, data):
     """
     Process the user's question based on the CSV data and generate an answer.
-    The prompt passes a sample of the CSV data and the user's question to GPT-4.
+    This function passes a structured prompt to GPT-4, including relevant data samples and the user's question.
     """
     sample_data = data.head(5).to_dict(orient="records")
     
-    # Prepare the prompt for GPT-4
-    prompt = f"""The user has uploaded a CSV file with the following sample data (first 5 rows):
-{json.dumps(sample_data, indent=2)}
+    # Generate a detailed and efficient prompt for GPT-4
+    prompt = f"""
+    You are analyzing a CSV dataset uploaded by a user. Below is a sample of the first 5 rows of the data:
+    {json.dumps(sample_data, indent=2)}
 
-Based on this data, answer the following question: '{question}'
-If the question cannot be answered from the given data, please state that clearly.
+    The user has asked the following question about the data: '{question}'
 
-Format your response clearly and concisely, and ensure it is based solely on the provided data.
-"""
-
+    Your task is to analyze the data provided and answer the user's question as accurately as possible, based solely on the information in the data. 
+    If the question cannot be answered from the data, explicitly state that the data does not provide enough information to answer the question. 
+    Make sure the response is clear, concise, and directly addresses the user's query.
+    
+    Format the response clearly and provide explanations when necessary.
+    """
+    
     # Make a request to GPT-4
     response = create_chat_completion(
         model="gpt-4o-mini",
@@ -47,7 +60,7 @@ Format your response clearly and concisely, and ensure it is based solely on the
 def main():
     st.set_page_config(page_title="Dynamic CSV Analysis", layout="wide")
     
-    st.title("Ask Questions Based on CSV Data")
+    st.title("Dynamic Question Answering Based on CSV Data")
     
     # File uploader for CSV
     uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
@@ -58,7 +71,11 @@ def main():
         st.subheader("CSV Data Preview")
         st.dataframe(df.head())
 
-        st.subheader("Ask a Question")
+        # Checking sign-in failures
+        failures = count_sign_in_failures(df)
+        st.subheader(f"Users with sign-in failures: {failures}")
+
+        st.subheader("Ask a Question About the Data")
         question = st.text_input("Enter your question based on the CSV data:")
         
         if st.button("Get Answer"):
