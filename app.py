@@ -2,108 +2,122 @@ import streamlit as st
 import pandas as pd
 import json
 import openai
+import io
 
-# Set up OpenAI API key
+# Load OpenAI API key from Streamlit secrets
 openai.api_key = st.secrets["openai_api_key"]
 
-def create_chat_completion(**kwargs):
-    """
-    Wrapper function to create chat completion using OpenAI API.
-    """
+# LLM call function for processing audit and sign-in logs
+def create_chat_completion(prompt, model="gpt-4o-mini"):
     try:
-        return openai.ChatCompletion.create(**kwargs)
+        response = openai.ChatCompletion.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
     except Exception as e:
         st.error(f"Error in LLM call: {str(e)}")
         return None
 
-def summarize_data(data):
-    """
-    Summarizes the entire dataset, providing column names, row count, and a brief description of each column.
-    """
-    columns_summary = {}
-    for col in data.columns:
-        unique_vals = data[col].nunique()
-        columns_summary[col] = {
-            "Type": str(data[col].dtype),
-            "Unique Values": unique_vals,
-            "Sample Values": data[col].dropna().unique()[:5].tolist()  # Show 5 unique values
-        }
-    
-    summary = {
-        "Total Rows": len(data),
-        "Total Columns": len(data.columns),
-        "Columns": columns_summary
-    }
-    
-    return summary
+# Function to convert CSV to JSON
+def convert_csv_to_json(df):
+    return df.to_json(orient='records')
 
-def process_question(question, data):
-    """
-    Process the user's question based on the CSV data and generate an answer.
-    This function passes a structured prompt to GPT-4, including a summary of the dataset and the user's question.
-    """
-    summary = summarize_data(data)
-    
-    # Generate a detailed and efficient prompt for GPT-4
-    prompt = f"""
-    You are analyzing a CSV dataset with the following summary:
-    - Total Rows: {summary['Total Rows']}
-    - Total Columns: {summary['Total Columns']}
-    
-    Here is a breakdown of the columns:
-    {json.dumps(summary['Columns'], indent=2)}
-    
-    The user has asked the following question about the data: '{question}'
+# Prompt to process audit and sign-in events based on the predefined rules
+def generate_prompt(log_type, chunk):
+    if log_type == "Audit Logs Alerts":
+        # Define the prompt based on the 12 Audit Logs Alerts
+        prompt = f"""
+        Based on the following log data:
+        {json.dumps(chunk, indent=2)}
 
-    Based on this data summary, answer the user's question as accurately as possible. 
-    If the question cannot be answered from the data, explicitly state that the data does not provide enough information to answer the question. 
-    Make sure the response is clear, concise, and directly addresses the user's query.
-    
-    Format the response clearly and provide explanations when necessary.
-    """
-    
-    # Make a request to GPT-4
-    response = create_chat_completion(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    
-    if response:
-        return response.choices[0].message.content.strip()
-    else:
-        return "Unable to process the question due to an error."
+        Determine if any of the following Audit Logs Alerts apply:
+        1. Forwarding Email to another account
+        2. Suspicious User Password Change
+        3. User accounts added or Deleted
+        4. Audit Logs Disabled
+        5. MFA disabled
+        6. Record Type Based alerts
+        7. Device No Longer Compliant
+        8. Suspicious Inbox Manipulation Rule
+        9. Insight and report events
+        10. EOP Phishing and Malware events
+        11. Member added to Group
+        12. Member added to Role
 
+        Provide detailed answers and explanations for the relevant events.
+        """
+    elif log_type == "Sign In Logs Alerts":
+        # Define the prompt based on the 7 Sign In Logs Alerts
+        prompt = f"""
+        Based on the following log data:
+        {json.dumps(chunk, indent=2)}
+
+        Determine if any of the following Sign-In Logs Alerts apply:
+        1. Unusual amount of login failures
+        2. Possible Brute Force Lockout Evasion
+        3. Impossible Travel Alerts
+        4. Sign ins with Blacklisted IPs
+        5. Sign ins with anonymous IPs
+        6. Foreign country alerts
+        7. Unusual logins
+
+        Provide detailed answers and explanations for the relevant events.
+        """
+    return prompt
+
+# Main Streamlit app
 def main():
-    st.set_page_config(page_title="Dynamic CSV Analysis", layout="wide")
-    
-    st.title("Dynamic Question Answering Based on Large CSV Data")
-    
-    # File uploader for CSV
+    st.set_page_config(page_title="CSV to JSON & Audit Log Analyzer", layout="wide")
+
+    st.title("CSV to JSON Converter & Audit Log Analyzer")
+
+    # File upload for CSV
     uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-    
+
     if uploaded_file is not None:
-        # Read the CSV file
+        # Convert CSV to DataFrame
         df = pd.read_csv(uploaded_file)
-        
-        st.subheader(f"CSV Data Preview: {len(df)} rows and {len(df.columns)} columns.")
-        
-        # Show the entire dataframe with scrollable content
-        st.write("Scroll through the full dataset below:")
-        st.dataframe(df)  # Display the entire dataframe in a scrollable format
-        
-        # Let user input their question dynamically
-        st.subheader("Ask a Question About the Data")
-        question = st.text_input("Enter your question based on the CSV data:")
-        
-        if st.button("Get Answer"):
+        st.write("Uploaded CSV data:")
+        st.dataframe(df)
+
+        # Convert CSV to JSON
+        json_data = convert_csv_to_json(df)
+
+        # Download button for JSON
+        json_bytes = io.BytesIO(json_data.encode())
+        st.download_button(
+            label="Download JSON",
+            data=json_bytes,
+            file_name="converted_data.json",
+            mime="application/json"
+        )
+
+        # Asking questions based on audit and sign-in logs
+        st.subheader("Ask a Question (Audit or Sign-In Logs)")
+        log_type = st.selectbox("Select Log Type", ["Audit Logs Alerts", "Sign In Logs Alerts"])
+        question = st.text_input("Enter your question:")
+
+        if st.button("Submit"):
             if question.strip() != "":
-                with st.spinner("Processing question..."):
-                    answer = process_question(question, df)
-                    st.markdown(answer)
+                # Split the data into chunks (to simulate different events processing)
+                chunks = [df.iloc[i:i+500].to_dict(orient="records") for i in range(0, len(df), 500)]
+
+                final_answer = ""
+                for chunk in chunks:
+                    prompt = generate_prompt(log_type, chunk)
+                    
+                    # Call LLM multiple times (as per your requirement)
+                    with st.spinner("Processing..."):
+                        answer = create_chat_completion(prompt)
+                        if answer:
+                            final_answer += answer + "\n\n"
+
+                # Display the final answer from multiple LLM calls
+                st.subheader("Audit/Sign-In Logs Analysis Result")
+                st.markdown(final_answer)
             else:
                 st.warning("Please enter a valid question.")
-    else:
-        st.warning("Please upload a CSV file to begin analysis.")
 
 if __name__ == "__main__":
     main()
