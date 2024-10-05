@@ -2,15 +2,23 @@ import streamlit as st
 import pandas as pd
 import json
 import os
-from openai import OpenAI
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
 # Load environment variables
 load_dotenv()
 
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Handle different versions of OpenAI library
+try:
+    from openai import OpenAI
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    def create_chat_completion(**kwargs):
+        return client.chat.completions.create(**kwargs)
+except ImportError:
+    import openai
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    def create_chat_completion(**kwargs):
+        return openai.ChatCompletion.create(**kwargs)
 
 # Define alert types
 AUDIT_LOGS_ALERTS = [
@@ -106,7 +114,7 @@ def generate_report(alerts):
         prompt += f"{alert_type}: {len(events)} events\n"
     prompt += "\nProvide a summary of the alerts, including the most critical issues, potential security risks, and recommended actions. Please format the report in Markdown."
 
-    response = client.chat.completions.create(
+    response = create_chat_completion(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}]
     )
