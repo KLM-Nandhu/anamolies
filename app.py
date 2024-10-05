@@ -25,17 +25,29 @@ def convert_csv_to_json(df):
 
 # Function to match the question with log types (Audit or Sign-In)
 def determine_log_type(question):
-    audit_keywords = ["forwarding email", "password change", "user accounts", "audit logs", "mfa", "device no longer compliant", "inbox rule", "insight", "phishing", "malware", "group", "role"]
-    sign_in_keywords = ["login failures", "brute force", "impossible travel", "blacklisted ips", "anonymous ips", "foreign country", "unusual logins"]
+    # Audit log keywords
+    audit_keywords = ["forwarding email", "password change", "user accounts", 
+                      "audit logs", "mfa", "device no longer compliant", 
+                      "inbox rule", "insight", "phishing", "malware", 
+                      "group", "role"]
 
+    # Sign-in log keywords
+    sign_in_keywords = ["login failures", "brute force", "impossible travel", 
+                        "blacklisted ips", "anonymous ips", "foreign country", 
+                        "unusual logins"]
+
+    # Check for audit log keywords
     for keyword in audit_keywords:
         if keyword.lower() in question.lower():
             return "Audit Logs Alerts"
 
+    # Check for sign-in log keywords
     for keyword in sign_in_keywords:
         if keyword.lower() in question.lower():
             return "Sign In Logs Alerts"
 
+    # Fallback if no match found
+    st.warning("Unable to determine log type from the question. Please ensure you're asking about an event that matches either Audit Logs or Sign-In Logs.")
     return None
 
 # Function to filter the dataset based on the log type and the relevant rules
@@ -109,7 +121,7 @@ def main():
                 log_type = determine_log_type(question)
 
                 if log_type is None:
-                    st.warning("Unable to determine the log type from the question.")
+                    st.warning("Unable to determine the log type. Please ask a relevant question about Audit Logs or Sign-In Logs.")
                 else:
                     # Filter relevant data based on the log type
                     filtered_data = filter_relevant_rows(log_type, df)
@@ -117,7 +129,7 @@ def main():
                     if filtered_data.empty:
                         st.warning("No relevant data found based on the rules.")
                     else:
-                        # Process filtered data with multiple GPT-4 calls
+                        # Process filtered data with GPT-4
                         prompt = f"""
                         Based on the following {log_type} log data:
                         {json.dumps(filtered_data.to_dict(orient="records"), indent=2)}
