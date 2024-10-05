@@ -11,6 +11,9 @@ SAMPLE_ROWS = 100
 # Custom API endpoint for 4o-mini model
 CUSTOM_API_ENDPOINT = "https://your-custom-api-endpoint.com/v1/chat/completions"  # Replace with your actual endpoint
 
+# Securely get the API key from Streamlit secrets
+API_KEY = st.secrets["openai_api_key"]
+
 @st.cache_data
 def load_csv(file):
     return pd.read_csv(file)
@@ -29,13 +32,13 @@ def truncate_context(context, max_tokens):
         return " ".join(tokens[:max_tokens]) + "..."
     return context
 
-def get_4o_mini_response(context, question, api_key):
+def get_4o_mini_response(context, question):
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
     data = {
-        "model": "4o-mini",
+        "model": "gpt-4o-mini",  # Make sure this matches your model name exactly
         "messages": [
             {"role": "system", "content": "You are a helpful assistant that answers questions based on the given CSV data. Provide concise and accurate answers."},
             {"role": "user", "content": f"Here's a summary and sample of the CSV data:\n{context}\n\nQuestion: {question}\nAnswer:"}
@@ -54,14 +57,8 @@ def get_4o_mini_response(context, question, api_key):
 def main():
     st.set_page_config(page_title="CSV Q&A System", page_icon="📊", layout="wide")
     
-    st.title("CSV Q&A System with 4o-mini Model")
+    st.title("CSV Q&A System with GPT-4o-mini Model")
     st.write("Upload your CSV file, preview the data, and ask questions!")
-
-    # API Key Input
-    api_key = st.text_input("Enter your API Key:", type="password")
-    if not api_key:
-        st.warning("Please enter a valid API key to use the 4o-mini model.")
-        return
 
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
     
@@ -84,8 +81,8 @@ def main():
             question = st.text_input("Enter your question about the data:")
             
             if question:
-                with st.spinner("Generating answer with 4o-mini model..."):
-                    answer = get_4o_mini_response(context, question, api_key)
+                with st.spinner("Generating answer with GPT-4o-mini model..."):
+                    answer = get_4o_mini_response(context, question)
                 
                 if answer:
                     st.subheader("Answer")
