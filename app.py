@@ -8,17 +8,30 @@ from datetime import datetime, timedelta
 # Load environment variables
 load_dotenv()
 
-# Handle different versions of OpenAI library
+# Initialize OpenAI client with error handling
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    st.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
+    st.stop()
+
 try:
     from openai import OpenAI
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = OpenAI(api_key=openai_api_key)
     def create_chat_completion(**kwargs):
-        return client.chat.completions.create(**kwargs)
+        try:
+            return client.chat.completions.create(**kwargs)
+        except Exception as e:
+            st.error(f"Error calling OpenAI API: {str(e)}")
+            return None
 except ImportError:
     import openai
-    openai.api_key = os.getenv("OPENAI_API_KEY")
+    openai.api_key = openai_api_key
     def create_chat_completion(**kwargs):
-        return openai.ChatCompletion.create(**kwargs)
+        try:
+            return openai.ChatCompletion.create(**kwargs)
+        except Exception as e:
+            st.error(f"Error calling OpenAI API: {str(e)}")
+            return None
 
 # Define alert types
 AUDIT_LOGS_ALERTS = [
@@ -118,7 +131,10 @@ def generate_report(alerts):
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}]
     )
-    return response.choices[0].message.content
+    if response:
+        return response.choices[0].message.content
+    else:
+        return "Unable to generate report due to an error with the OpenAI API."
 
 def main():
     st.set_page_config(page_title="Comprehensive Log Analysis", layout="wide")
