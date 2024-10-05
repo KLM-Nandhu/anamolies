@@ -157,12 +157,7 @@ Please analyze this data and provide an answer to the question. If the question 
 def main():
     st.set_page_config(page_title="Comprehensive Log Analysis", layout="wide")
 
-    st.title("Comprehensive Log Analysis System")
-
-    # Add debugging information
-    st.sidebar.write("Debug Information:")
-    st.sidebar.write(f"Streamlit version: {st.__version__}")
-    st.sidebar.write(f"Python version: {sys.version}")
+ 
     
     # Safely try to get OpenAI version
     try:
