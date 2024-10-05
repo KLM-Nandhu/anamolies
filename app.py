@@ -157,7 +157,7 @@ Please analyze this data and provide an answer to the question. If the question 
 def main():
     st.set_page_config(page_title="Comprehensive Log Analysis", layout="wide")
 
- st.title("Comprehensive Log Analysis System")
+    st.title("Comprehensive Log Analysis System")
     
     # Safely try to get OpenAI version
     try:
