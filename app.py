@@ -2,11 +2,19 @@ import streamlit as st
 import pandas as pd
 import json
 import sys
-from openai import OpenAI
 from datetime import datetime, timedelta
 
-# Initialize OpenAI client with Streamlit secrets
-client = OpenAI(api_key=st.secrets["openai_api_key"])
+# Try to import OpenAI, handling different versions
+try:
+    from openai import OpenAI
+    client = OpenAI(api_key=st.secrets["openai_api_key"])
+    def create_chat_completion(**kwargs):
+        return client.chat.completions.create(**kwargs)
+except ImportError:
+    import openai
+    openai.api_key = st.secrets["openai_api_key"]
+    def create_chat_completion(**kwargs):
+        return openai.ChatCompletion.create(**kwargs)
 
 # Define alert types
 AUDIT_LOGS_ALERTS = [
@@ -117,7 +125,7 @@ def generate_report(alerts):
     prompt += "\nProvide a summary of the alerts, including the most critical issues, potential security risks, and recommended actions. Please format the report in Markdown."
 
     try:
-        response = client.chat.completions.create(
+        response = create_chat_completion(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
@@ -128,7 +136,7 @@ def generate_report(alerts):
 
 def llm_call(prompt, model="gpt-4o-mini"):
     try:
-        response = client.chat.completions.create(
+        response = create_chat_completion(
             model=model,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -221,7 +229,7 @@ def main():
     # Safely try to get OpenAI version
     try:
         openai_version = openai.__version__
-    except AttributeError:
+    except:
         openai_version = "Version information not available"
     st.sidebar.write(f"OpenAI library version: {openai_version}")
 
