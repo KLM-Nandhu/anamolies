@@ -111,6 +111,36 @@ def generate_report(alerts):
         st.error(f"Error generating report: {str(e)}")
         return "Unable to generate report due to an error with the OpenAI API."
 
+def process_question(question, alerts):
+    # Step 1: Determine the relevant alert type
+    alert_types = "\n".join(ALL_ALERTS)
+    prompt_category = f"Given the following question: '{question}', which of these alert types is most relevant?\n\n{alert_types}\n\nRespond with just the name of the most relevant alert type."
+
+    try:
+        response_category = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt_category}]
+        )
+        relevant_alert = response_category.choices[0].message.content.strip()
+
+        # Step 2: Generate answer based on the relevant alert
+        relevant_events = alerts.get(relevant_alert, [])
+        event_count = len(relevant_events)
+        event_sample = json.dumps(relevant_events[:5], indent=2)  # Sample of up to 5 events
+
+        prompt_answer = f"Question: {question}\n\nRelevant Alert Type: {relevant_alert}\nNumber of events: {event_count}\n\nSample events:\n{event_sample}\n\nBased on this information, please provide a concise answer to the question. If the alert type doesn't seem directly relevant, explain why and provide the best possible answer."
+
+        response_answer = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt_answer}]
+        )
+        answer = response_answer.choices[0].message.content.strip()
+
+        return f"Relevant Alert Type: {relevant_alert}\n\nAnswer: {answer}"
+    except Exception as e:
+        st.error(f"Error processing question: {str(e)}")
+        return "Unable to process the question due to an error with the OpenAI API."
+
 def main():
     st.set_page_config(page_title="Comprehensive Log Analysis", layout="wide")
 
@@ -148,6 +178,17 @@ def main():
                     if events:
                         with st.expander(f"{alert_type} ({len(events)} events)"):
                             st.json(events)
+
+        # Question Answering Section
+        st.subheader("❓ Ask a Question")
+        question = st.text_input("Enter your question about the log data:")
+        if st.button("Get Answer"):
+            if 'alerts' in locals():
+                with st.spinner("Processing question..."):
+                    answer = process_question(question, alerts)
+                    st.markdown(answer)
+            else:
+                st.warning("Please analyze the logs first before asking questions.")
 
 if __name__ == "__main__":
     main()
