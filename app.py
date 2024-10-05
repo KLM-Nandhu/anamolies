@@ -211,49 +211,55 @@ def process_question(question, alerts):
 def main():
     st.set_page_config(page_title="Comprehensive Log Analysis", layout="wide")
 
-    st.title("🔍 Comprehensive Log Analysis System")
+    st.title("Comprehensive Log Analysis System")
 
     # Add debugging information
     st.sidebar.write("Debug Information:")
     st.sidebar.write(f"Streamlit version: {st.__version__}")
     st.sidebar.write(f"Python version: {sys.version}")
-    st.sidebar.write(f"OpenAI library version: {openai.__version__}")
+    
+    # Safely try to get OpenAI version
+    try:
+        openai_version = openai.__version__
+    except AttributeError:
+        openai_version = "Version information not available"
+    st.sidebar.write(f"OpenAI library version: {openai_version}")
 
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
     if uploaded_file is not None:
         json_data = csv_to_json(uploaded_file)
         
         st.download_button(
-            label="📥 Download JSON",
+            label="Download JSON",
             data=json_data,
             file_name="converted_data.json",
             mime="application/json"
         )
 
-        if st.button("🔍 Analyze Logs"):
+        if st.button("Analyze Logs"):
             with st.spinner("Processing..."):
                 alerts = process_alerts(json_data)
                 
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.subheader("📊 Alert Summary")
+                    st.subheader("Alert Summary")
                     for alert_type, events in alerts.items():
                         st.metric(alert_type, len(events))
                 
                 with col2:
-                    st.subheader("📝 Detailed Report")
+                    st.subheader("Detailed Report")
                     report = generate_report(alerts)
                     st.markdown(report)
 
-                st.subheader("🔍 Detailed Alerts")
+                st.subheader("Detailed Alerts")
                 for alert_type, events in alerts.items():
                     if events:
                         with st.expander(f"{alert_type} ({len(events)} events)"):
                             st.json(events)
 
         # Question Answering Section
-        st.subheader("❓ Ask a Question")
+        st.subheader("Ask a Question")
         question = st.text_input("Enter your question about the log data:")
         if st.button("Get Answer"):
             if 'alerts' in locals():
