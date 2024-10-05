@@ -54,12 +54,21 @@ def get_gpt4o_mini_response(context, question):
             max_tokens=MAX_TOKENS
         )
         return response.choices[0].message['content'].strip()
-    except openai.error.RateLimitError:
+    except openai.RateLimitError:
         st.error("OpenAI API rate limit reached. Please wait a moment before trying again.")
         time.sleep(RATE_LIMIT_SECONDS)
         return None
+    except openai.APIError as e:
+        st.error(f"OpenAI API returned an API Error: {str(e)}")
+        return None
+    except openai.APIConnectionError as e:
+        st.error(f"Failed to connect to OpenAI API: {str(e)}")
+        return None
+    except openai.InvalidRequestError as e:
+        st.error(f"Invalid request to OpenAI API: {str(e)}")
+        return None
     except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
+        st.error(f"An unexpected error occurred: {str(e)}")
         return None
 
 def generate_question_suggestions(df):
