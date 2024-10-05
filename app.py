@@ -7,7 +7,7 @@ import io
 # Load OpenAI API key from Streamlit secrets
 openai.api_key = st.secrets["openai_api_key"]
 
-# LLM call function for processing audit and sign-in logs
+# Function to call GPT-4 with a specific prompt
 def create_chat_completion(prompt, model="gpt-4o-mini"):
     try:
         response = openai.ChatCompletion.create(
@@ -23,7 +23,22 @@ def create_chat_completion(prompt, model="gpt-4o-mini"):
 def convert_csv_to_json(df):
     return df.to_json(orient='records')
 
-# Filter the dataset to only include relevant rows based on pre-defined rules
+# Function to match the question with log types (Audit or Sign-In)
+def determine_log_type(question):
+    audit_keywords = ["forwarding email", "password change", "user accounts", "audit logs", "mfa", "device no longer compliant", "inbox rule", "insight", "phishing", "malware", "group", "role"]
+    sign_in_keywords = ["login failures", "brute force", "impossible travel", "blacklisted ips", "anonymous ips", "foreign country", "unusual logins"]
+
+    for keyword in audit_keywords:
+        if keyword.lower() in question.lower():
+            return "Audit Logs Alerts"
+
+    for keyword in sign_in_keywords:
+        if keyword.lower() in question.lower():
+            return "Sign In Logs Alerts"
+
+    return None
+
+# Function to filter the dataset based on the log type and the relevant rules
 def filter_relevant_rows(log_type, df):
     if log_type == "Audit Logs Alerts":
         # Apply the conditions for audit logs
@@ -59,9 +74,9 @@ def filter_relevant_rows(log_type, df):
 
 # Main Streamlit app
 def main():
-    st.set_page_config(page_title="CSV to JSON & Audit Log Analyzer", layout="wide")
+    st.set_page_config(page_title="CSV to JSON & Log Analyzer", layout="wide")
 
-    st.title("CSV to JSON Converter & Audit Log Analyzer")
+    st.title("CSV to JSON Converter & Log Analyzer")
 
     # File upload for CSV
     uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
@@ -84,34 +99,39 @@ def main():
             mime="application/json"
         )
 
-        # Asking questions based on audit and sign-in logs
-        st.subheader("Ask a Question (Audit or Sign-In Logs)")
-        log_type = st.selectbox("Select Log Type", ["Audit Logs Alerts", "Sign In Logs Alerts"])
+        # Asking questions based on logs
+        st.subheader("Ask a Question")
         question = st.text_input("Enter your question:")
 
         if st.button("Submit"):
             if question.strip() != "":
-                # Filter relevant data based on log type and rules
-                filtered_data = filter_relevant_rows(log_type, df)
+                # Determine the log type based on the question
+                log_type = determine_log_type(question)
 
-                if filtered_data.empty:
-                    st.warning("No relevant data found based on the rules.")
+                if log_type is None:
+                    st.warning("Unable to determine the log type from the question.")
                 else:
-                    # Send filtered data (smaller chunks) to GPT-4o-mini
-                    prompt = f"""
-                    Based on the following log data:
-                    {json.dumps(filtered_data.to_dict(orient="records"), indent=2)}
+                    # Filter relevant data based on the log type
+                    filtered_data = filter_relevant_rows(log_type, df)
 
-                    Answer the following question: '{question}'
-                    """
-                    
-                    with st.spinner("Processing..."):
-                        answer = create_chat_completion(prompt)
-                        if answer:
-                            st.subheader("Analysis Result")
-                            st.markdown(answer)
-                        else:
-                            st.error("Unable to generate an answer.")
+                    if filtered_data.empty:
+                        st.warning("No relevant data found based on the rules.")
+                    else:
+                        # Process filtered data with multiple GPT-4 calls
+                        prompt = f"""
+                        Based on the following {log_type} log data:
+                        {json.dumps(filtered_data.to_dict(orient="records"), indent=2)}
+
+                        Answer the following question: '{question}'
+                        """
+
+                        with st.spinner("Processing..."):
+                            answer = create_chat_completion(prompt)
+                            if answer:
+                                st.subheader("Analysis Result")
+                                st.markdown(answer)
+                            else:
+                                st.error("Unable to generate an answer.")
             else:
                 st.warning("Please enter a valid question.")
 
