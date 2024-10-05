@@ -16,15 +16,6 @@ def create_chat_completion(**kwargs):
         st.error(f"Error in LLM call: {str(e)}")
         return None
 
-def count_sign_in_failures(data):
-    """
-    Counts the number of users who have sign-in failures based on the "Status" field.
-    """
-    failed_sign_ins = data[data["Status"] == "Failure"]
-    unique_failed_users = failed_sign_ins["User"].nunique()
-    
-    return unique_failed_users
-
 def process_question(question, data):
     """
     Process the user's question based on the CSV data and generate an answer.
@@ -70,19 +61,18 @@ def main():
         df = pd.read_csv(uploaded_file)
         st.subheader("CSV Data Preview")
         st.dataframe(df.head())
-
-        # Checking sign-in failures
-        failures = count_sign_in_failures(df)
-        st.subheader(f"Users with sign-in failures: {failures}")
-
+        
+        # Let user input their question dynamically
         st.subheader("Ask a Question About the Data")
         question = st.text_input("Enter your question based on the CSV data:")
         
         if st.button("Get Answer"):
-            with st.spinner("Processing question..."):
-                answer = process_question(question, df)
-                st.markdown(answer)
-    
+            if question.strip() != "":
+                with st.spinner("Processing question..."):
+                    answer = process_question(question, df)
+                    st.markdown(answer)
+            else:
+                st.warning("Please enter a valid question.")
     else:
         st.warning("Please upload a CSV file to begin analysis.")
 
