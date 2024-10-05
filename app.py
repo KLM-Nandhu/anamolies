@@ -116,8 +116,13 @@ def main():
         try:
             # Convert CSV to DataFrame
             df = pd.read_csv(uploaded_file)
+            
+            # Display full CSV content in a scrollable container
             st.write("Uploaded CSV data:")
-            st.dataframe(df.head())
+            st.dataframe(df, height=400)  # Adjust height as needed
+
+            # Show total number of rows
+            st.write(f"Total rows in CSV: {len(df)}")
 
             # Convert CSV to JSON
             json_data = convert_csv_to_json(df)
