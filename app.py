@@ -44,10 +44,6 @@ SIGN_IN_LOGS_ALERTS = [
 
 ALL_ALERTS = AUDIT_LOGS_ALERTS + SIGN_IN_LOGS_ALERTS
 
-def csv_to_json(csv_file):
-    df = pd.read_csv(csv_file)
-    return df.to_json(orient='records')
-
 def process_alerts(json_data):
     try:
         data = json.loads(json_data)
@@ -145,76 +141,18 @@ def llm_call(prompt, model="gpt-4o-mini"):
         st.error(f"Error in LLM call: {str(e)}")
         return None
 
-def determine_relevant_alert_types(question):
-    prompt = f"""Given the following question: '{question}', which of these alert types are most relevant? List up to 3 most relevant types in order of relevance.
+def process_question(question, json_data):
+    prompt = f"""Given the following question about log data: '{question}'
+    
+The log data is in JSON format. Here's a sample of the data (first 5 entries):
+{json.dumps(json.loads(json_data)[:5], indent=2)}
 
-Alert types:
-{', '.join(ALL_ALERTS)}
+Please analyze this data and provide an answer to the question. If the question cannot be answered based on the given data, please state that clearly. Format your response in a clear and concise manner."""
 
-Respond with just the names of the relevant alert types, separated by commas."""
-
-    return llm_call(prompt)
-
-def extract_relevant_info(question, alert_type, events):
-    event_sample = json.dumps(events[:5], indent=2)  # Sample of up to 5 events
-    prompt = f"""Question: {question}
-Alert Type: {alert_type}
-Number of events: {len(events)}
-
-Sample events:
-{event_sample}
-
-Based on this information, extract and summarize the key details that are relevant to answering the question. Focus on the most important information."""
-
-    return llm_call(prompt)
-
-def generate_initial_answer(question, alert_types, relevant_info):
-    prompt = f"""Question: {question}
-
-Relevant Alert Types: {alert_types}
-
-Relevant Information:
-{relevant_info}
-
-Based on this information, provide a comprehensive answer to the question. If the alert types don't seem directly relevant, explain why and provide the best possible answer based on the available information."""
-
-    return llm_call(prompt)
-
-def refine_answer(question, initial_answer):
-    prompt = f"""Original Question: {question}
-
-Initial Answer:
-{initial_answer}
-
-Please refine and improve this answer. Ensure it's clear, concise, and directly addresses the question. Add any additional insights or context that might be helpful. If there are any potential security implications or recommendations, include them."""
-
-    return llm_call(prompt)
-
-def process_question(question, alerts):
-    # Step 1: Determine relevant alert types
-    relevant_alert_types = determine_relevant_alert_types(question)
-    if not relevant_alert_types:
+    answer = llm_call(prompt)
+    if not answer:
         return "Unable to process the question due to an error."
-
-    # Step 2: Extract relevant information for each alert type
-    relevant_info = ""
-    for alert_type in relevant_alert_types.split(', '):
-        events = alerts.get(alert_type.strip(), [])
-        info = extract_relevant_info(question, alert_type, events)
-        if info:
-            relevant_info += f"\n\nAlert Type: {alert_type}\n{info}"
-
-    # Step 3: Generate initial answer
-    initial_answer = generate_initial_answer(question, relevant_alert_types, relevant_info)
-    if not initial_answer:
-        return "Unable to generate an answer due to an error."
-
-    # Step 4: Refine the answer
-    final_answer = refine_answer(question, initial_answer)
-    if not final_answer:
-        return initial_answer  # Fallback to initial answer if refinement fails
-
-    return f"Relevant Alert Types: {relevant_alert_types}\n\nAnswer: {final_answer}"
+    return answer
 
 def main():
     st.set_page_config(page_title="Comprehensive Log Analysis", layout="wide")
@@ -235,7 +173,12 @@ def main():
 
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
     if uploaded_file is not None:
-        json_data = csv_to_json(uploaded_file)
+        # CSV Preview
+        df = pd.read_csv(uploaded_file)
+        st.subheader("CSV Preview")
+        st.dataframe(df.head())
+
+        json_data = df.to_json(orient='records')
         
         st.download_button(
             label="Download JSON",
@@ -244,8 +187,17 @@ def main():
             mime="application/json"
         )
 
-        if st.button("Analyze Logs"):
-            with st.spinner("Processing..."):
+        # Question Answering Section
+        st.subheader("Ask a Question")
+        question = st.text_input("Enter your question about the log data:")
+        if st.button("Get Answer"):
+            with st.spinner("Processing question..."):
+                answer = process_question(question, json_data)
+                st.markdown(answer)
+
+        # Log Analysis Section
+        if st.button("Perform Detailed Log Analysis"):
+            with st.spinner("Analyzing logs..."):
                 alerts = process_alerts(json_data)
                 
                 col1, col2 = st.columns(2)
@@ -266,16 +218,8 @@ def main():
                         with st.expander(f"{alert_type} ({len(events)} events)"):
                             st.json(events)
 
-        # Question Answering Section
-        st.subheader("Ask a Question")
-        question = st.text_input("Enter your question about the log data:")
-        if st.button("Get Answer"):
-            if 'alerts' in locals():
-                with st.spinner("Processing question..."):
-                    answer = process_question(question, alerts)
-                    st.markdown(answer)
-            else:
-                st.warning("Please analyze the logs first before asking questions.")
+    else:
+        st.warning("Please upload a CSV file to begin analysis.")
 
 if __name__ == "__main__":
     main()
