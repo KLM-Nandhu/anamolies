@@ -1,15 +1,17 @@
 import streamlit as st
 import pandas as pd
-from openai import OpenAI
+import requests
 import io
+import json
 
 # Configuration
 MAX_TOKENS = 150
 MAX_CONTEXT_TOKENS = 3000
 SAMPLE_ROWS = 100
 
-# Set up OpenAI client
-client = OpenAI(api_key=st.secrets["openai_api_key"])
+# Custom API endpoint for 4o-mini model
+CUSTOM_API_ENDPOINT = "https://your-custom-api-endpoint.com/v1/chat/completions"  # Replace with your actual endpoint
+API_KEY = st.secrets["custom_api_key"]  # Make sure to set this in your Streamlit secrets
 
 @st.cache_data
 def load_csv(file):
@@ -29,21 +31,26 @@ def truncate_context(context, max_tokens):
         return " ".join(tokens[:max_tokens]) + "..."
     return context
 
-def get_gpt_response(context, question, model="4o-mini"):  # Keeping the model as 4o-mini
+def get_4o_mini_response(context, question):
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "4o-mini",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant that answers questions based on the given CSV data. Provide concise and accurate answers."},
+            {"role": "user", "content": f"Here's a summary and sample of the CSV data:\n{context}\n\nQuestion: {question}\nAnswer:"}
+        ],
+        "max_tokens": MAX_TOKENS
+    }
+    
     try:
-        # Attempting to use the 4o-mini model
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that answers questions based on the given CSV data. Provide concise and accurate answers."},
-                {"role": "user", "content": f"Here's a summary and sample of the CSV data:\n{context}\n\nQuestion: {question}\nAnswer:"}
-            ],
-            max_tokens=MAX_TOKENS
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        # Catch the error and show the specific error message if 4o-mini doesn't work
-        st.error(f"Error with model {model}: {str(e)}")
+        response = requests.post(CUSTOM_API_ENDPOINT, headers=headers, json=data)
+        response.raise_for_status()
+        return response.json()['choices'][0]['message']['content'].strip()
+    except requests.exceptions.RequestException as e:
+        st.error(f"An error occurred while calling the API: {str(e)}")
         return None
 
 def main():
@@ -73,8 +80,8 @@ def main():
             question = st.text_input("Enter your question about the data:")
             
             if question:
-                with st.spinner("Generating answer..."):
-                    answer = get_gpt_response(context, question)
+                with st.spinner("Generating answer with 4o-mini model..."):
+                    answer = get_4o_mini_response(context, question)
                 
                 if answer:
                     st.subheader("Answer")
