@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import io
-import json
 
 # Configuration
 MAX_TOKENS = 150
@@ -11,7 +10,6 @@ SAMPLE_ROWS = 100
 
 # Custom API endpoint for 4o-mini model
 CUSTOM_API_ENDPOINT = "https://your-custom-api-endpoint.com/v1/chat/completions"  # Replace with your actual endpoint
-API_KEY = st.secrets["custom_api_key"]  # Make sure to set this in your Streamlit secrets
 
 @st.cache_data
 def load_csv(file):
@@ -31,9 +29,9 @@ def truncate_context(context, max_tokens):
         return " ".join(tokens[:max_tokens]) + "..."
     return context
 
-def get_4o_mini_response(context, question):
+def get_4o_mini_response(context, question, api_key):
     headers = {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     data = {
@@ -59,6 +57,12 @@ def main():
     st.title("CSV Q&A System with 4o-mini Model")
     st.write("Upload your CSV file, preview the data, and ask questions!")
 
+    # API Key Input
+    api_key = st.text_input("Enter your API Key:", type="password")
+    if not api_key:
+        st.warning("Please enter a valid API key to use the 4o-mini model.")
+        return
+
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
     
     if uploaded_file is not None:
@@ -81,7 +85,7 @@ def main():
             
             if question:
                 with st.spinner("Generating answer with 4o-mini model..."):
-                    answer = get_4o_mini_response(context, question)
+                    answer = get_4o_mini_response(context, question, api_key)
                 
                 if answer:
                     st.subheader("Answer")
