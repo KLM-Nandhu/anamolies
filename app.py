@@ -16,21 +16,46 @@ def create_chat_completion(**kwargs):
         st.error(f"Error in LLM call: {str(e)}")
         return None
 
+def summarize_data(data):
+    """
+    Summarizes the entire dataset, providing column names, row count, and a brief description of each column.
+    """
+    columns_summary = {}
+    for col in data.columns:
+        unique_vals = data[col].nunique()
+        columns_summary[col] = {
+            "Type": str(data[col].dtype),
+            "Unique Values": unique_vals,
+            "Sample Values": data[col].dropna().unique()[:5].tolist()  # Show 5 unique values
+        }
+    
+    summary = {
+        "Total Rows": len(data),
+        "Total Columns": len(data.columns),
+        "Columns": columns_summary
+    }
+    
+    return summary
+
 def process_question(question, data):
     """
     Process the user's question based on the CSV data and generate an answer.
-    This function passes a structured prompt to GPT-4, including relevant data samples and the user's question.
+    This function passes a structured prompt to GPT-4, including a summary of the dataset and the user's question.
     """
-    sample_data = data.head(5).to_dict(orient="records")
+    summary = summarize_data(data)
     
     # Generate a detailed and efficient prompt for GPT-4
     prompt = f"""
-    You are analyzing a CSV dataset uploaded by a user. Below is a sample of the first 5 rows of the data:
-    {json.dumps(sample_data, indent=2)}
-
+    You are analyzing a large CSV dataset with the following summary:
+    - Total Rows: {summary['Total Rows']}
+    - Total Columns: {summary['Total Columns']}
+    
+    Here is a breakdown of the columns:
+    {json.dumps(summary['Columns'], indent=2)}
+    
     The user has asked the following question about the data: '{question}'
 
-    Your task is to analyze the data provided and answer the user's question as accurately as possible, based solely on the information in the data. 
+    Based on this data summary, answer the user's question as accurately as possible. 
     If the question cannot be answered from the data, explicitly state that the data does not provide enough information to answer the question. 
     Make sure the response is clear, concise, and directly addresses the user's query.
     
@@ -51,7 +76,7 @@ def process_question(question, data):
 def main():
     st.set_page_config(page_title="Dynamic CSV Analysis", layout="wide")
     
-    st.title("Dynamic Question Answering Based on CSV Data")
+    st.title("Dynamic Question Answering Based on Large CSV Data")
     
     # File uploader for CSV
     uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
@@ -59,8 +84,13 @@ def main():
     if uploaded_file is not None:
         # Read the CSV file
         df = pd.read_csv(uploaded_file)
+        
         st.subheader("CSV Data Preview")
-        st.dataframe(df.head())
+        st.write(f"Data contains {len(df)} rows and {len(df.columns)} columns.")
+        
+        # Optional: Display the first few rows if needed (not the entire dataset)
+        st.write("Showing the first 10 rows for reference:")
+        st.dataframe(df.head(10))  # Show first 10 rows for preview
         
         # Let user input their question dynamically
         st.subheader("Ask a Question About the Data")
