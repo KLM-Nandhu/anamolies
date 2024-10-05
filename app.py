@@ -43,7 +43,7 @@ def get_relevant_data(df, question, max_tokens):
     
     return context
 
-def get_gpt4_response(context, question):
+def get_gpt4o-mini_response(context, question):
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
@@ -74,7 +74,7 @@ def generate_question_suggestions(df):
     return suggestions
 
 def main():
-    st.title("Multi-CSV Q&A System with GPT-4")
+    st.title("Multi-CSV Q&A System with GPT-4o-mini")
     uploaded_files = st.file_uploader("Choose CSV files", type="csv", accept_multiple_files=True)
     
     if uploaded_files:
@@ -95,8 +95,8 @@ def main():
                 if user_question:
                     context = get_relevant_data(df, user_question, MAX_CONTEXT_TOKENS)
                     
-                    with st.spinner("Generating answer with GPT-4..."):
-                        answer = get_gpt4_response(context, user_question)
+                    with st.spinner("Generating answer with GPT-4o-mini..."):
+                        answer = get_gpt4o-mini_response(context, user_question)
                     if answer:
                         st.write("Answer:", answer)
                         # Option to see the context used
