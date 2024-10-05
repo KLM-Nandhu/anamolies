@@ -43,10 +43,10 @@ def get_relevant_data(df, question, max_tokens):
     
     return context
 
-def get_gpt-4o-mini_response(context, question):
+def get_gpt4o_mini_response(context, question):
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
+            model="gpt-4o-mini",  # Using the specified model name
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that answers questions based on the given data."},
                 {"role": "user", "content": f"Given the following data:\n{context}\n\nQuestion: {question}\nAnswer:"}
@@ -96,7 +96,7 @@ def main():
                     context = get_relevant_data(df, user_question, MAX_CONTEXT_TOKENS)
                     
                     with st.spinner("Generating answer with GPT-4o-mini..."):
-                        answer = get_gpt4o-mini_response(context, user_question)
+                        answer = get_gpt4o_mini_response(context, user_question)
                     if answer:
                         st.write("Answer:", answer)
                         # Option to see the context used
