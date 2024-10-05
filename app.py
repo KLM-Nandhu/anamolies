@@ -3,6 +3,7 @@ import pandas as pd
 import openai
 from io import StringIO
 import time
+import random
 
 # Configuration
 MAX_TOKENS = 150
@@ -61,37 +62,48 @@ def get_gpt4_response(context, question):
         st.error(f"An error occurred: {str(e)}")
         return None
 
+def generate_question_suggestions(df):
+    columns = df.columns.tolist()
+    suggestions = [
+        f"What is the average {random.choice(columns)}?",
+        f"How many unique values are there in the {random.choice(columns)} column?",
+        f"What is the relationship between {random.choice(columns)} and {random.choice(columns)}?",
+        f"What is the most common value in the {random.choice(columns)} column?",
+        f"How has the {random.choice(columns)} changed over time?"
+    ]
+    return suggestions
+
 def main():
     st.title("Multi-CSV Q&A System with GPT-4")
-
     uploaded_files = st.file_uploader("Choose CSV files", type="csv", accept_multiple_files=True)
-
+    
     if uploaded_files:
         try:
             df = load_data(uploaded_files)
             if df is not None:
                 st.write("Data Preview (first 5 rows of combined data):")
                 st.write(df.head())
-
                 st.write(f"Total rows in combined dataset: {len(df)}")
-
-                question = st.text_input("Ask a question about the data:")
-
-                if question:
-                    context = get_relevant_data(df, question, MAX_CONTEXT_TOKENS)
+                
+                # Generate and display question suggestions
+                suggestions = generate_question_suggestions(df)
+                selected_question = st.selectbox("Suggested questions:", [""] + suggestions)
+                
+                # Allow user to input their own question or use a suggestion
+                user_question = st.text_input("Ask a question about the data:", value=selected_question)
+                
+                if user_question:
+                    context = get_relevant_data(df, user_question, MAX_CONTEXT_TOKENS)
                     
                     with st.spinner("Generating answer with GPT-4..."):
-                        answer = get_gpt4_response(context, question)
-
+                        answer = get_gpt4_response(context, user_question)
                     if answer:
                         st.write("Answer:", answer)
-
                         # Option to see the context used
                         if st.checkbox("Show context used for answering"):
                             st.text_area("Context:", context, height=200)
             else:
                 st.error("No valid data was found in the uploaded files.")
-
         except Exception as e:
             st.error(f"An unexpected error occurred: {str(e)}")
 
