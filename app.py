@@ -138,9 +138,14 @@ def main():
 
             # Asking questions based on logs
             st.subheader("Ask a Question")
-            question = st.text_input("Enter your question:")
+            
+            # Create a form for the question input
+            with st.form(key='question_form'):
+                question = st.text_input("Enter your question:")
+                submit_button = st.form_submit_button(label='Submit')
 
-            if st.button("Submit"):
+            # Process the question when the form is submitted (either by Enter key or Submit button)
+            if submit_button or question:  # This condition checks if either the button was clicked or Enter was pressed
                 if question.strip() != "":
                     # Categorize the question using LLM
                     with st.spinner("Categorizing question..."):
